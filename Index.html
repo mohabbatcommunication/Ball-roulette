@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<title>Ball Roulette</title>
+
+<style>
+*{box-sizing:border-box}
+html,body{
+margin:0;min-height:100%;
+background:radial-gradient(ellipse at top,#35455a,#080b12 75%);
+color:white;font-family:Arial,sans-serif;text-align:center
+}
+body{padding:15px 8px 25px}
+
+h2{
+position:relative;display:block;width:fit-content;max-width:96%;
+margin:20px auto 30px;padding:13px 17px;
+font-size:clamp(17px,4.7vw,34px);font-weight:500;
+letter-spacing:1.5px;line-height:1.5;color:#ffb8ff;
+background:linear-gradient(180deg,#35102d,#160b1d);
+border:3px solid #ff9d00;border-radius:13px;
+text-shadow:0 0 3px #fff,0 0 7px #ff00ff,0 0 15px #ff00ff,0 0 28px #ff00ff;
+box-shadow:0 0 5px #ffb000,0 0 12px #ff8c00,0 0 25px #ff4d00,inset 0 0 8px #ff8c00,inset 0 0 18px #ff00b7;
+animation:neonPulse 1.8s ease-in-out infinite alternate
+}
+
+@keyframes neonPulse{
+0%{color:#ffb8ff;text-shadow:0 0 3px #fff,0 0 7px #ff00ff,0 0 15px #ff00ff;box-shadow:0 0 5px #ffb000,0 0 12px #ff8c00,0 0 22px #ff4d00,inset 0 0 8px #ff8c00}
+100%{color:#fff;text-shadow:0 0 4px #fff,0 0 12px #ff00ff,0 0 25px #ff00ff,0 0 38px #ff008c;box-shadow:0 0 8px #ffdd55,0 0 18px #ff8c00,0 0 35px #ff4d00,inset 0 0 14px #ff00b7}
+}
+
+canvas{width:min(96vw,480px);height:auto;display:block;margin:0 auto 8px}
+
+.name-panel{
+display:flex;justify-content:space-between;gap:12px;
+max-width:480px;margin:0 auto 14px
+}
+
+.name-box{
+width:50%;min-width:0;padding:10px 8px;border-radius:12px;
+background:#ffffff12;border:1px solid #ffffff25
+}
+
+.name-box label{display:block;font-weight:bold;font-size:13px;margin-bottom:7px}
+.red-label{color:#ff6570}
+.blue-label{color:#69baff}
+
+.name-box input{
+width:100%;min-width:0;border-radius:8px;
+border:1px solid #718096;padding:10px 5px;
+font-size:16px;text-align:center;
+background:#101925;color:white;outline:none
+}
+
+button{border:0;border-radius:12px;padding:14px 20px;font-size:16px;font-weight:900}
+
+#play{
+background:linear-gradient(#69ffc1,#00b66a);
+color:#05291b;box-shadow:0 5px 0 #00733f
+}
+
+#full{
+margin-left:8px;background:linear-gradient(#64748b,#283447);
+color:white;border:1px solid #a4b2c4
+}
+
+#result{min-height:34px;margin:18px auto 8px;color:#ffe7a2;font-size:21px;font-weight:bold}
+#soundStatus{color:#c2cede;font-size:12px;margin-top:6px}
+
+#app:fullscreen{
+width:100%;height:100dvh;overflow:auto;
+background:radial-gradient(ellipse at top,#35455a,#080b12 75%);
+padding:10px;display:flex;flex-direction:column;align-items:center;justify-content:center
+}
+
+#app:fullscreen canvas{
+width:min(78vw,min(70vh,620px));max-height:70vh;object-fit:contain
+}
+
+@media(orientation:landscape){
+#app:fullscreen{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto 1fr auto;gap:5px}
+#app:fullscreen h2{grid-column:1/-1}
+#app:fullscreen canvas{grid-column:1;grid-row:2/4;width:min(70vh,68vw);max-height:80vh;margin:auto}
+#app:fullscreen .name-panel,#app:fullscreen #play,#app:fullscreen #full,#app:fullscreen #result,#app:fullscreen #soundStatus{grid-column:2}
+#app:fullscreen .name-panel{width:220px;flex-direction:column}
+#app:fullscreen .name-box{width:100%}
+}
+</style>
+</head>
+
+<body>
+<div id="app">
+
+<h2>LIKE • SHARE • SUBSCRIBE</h2>
+
+<canvas id="game" width="460" height="500"></canvas>
+
+<div class="name-panel">
+<div class="name-box">
+<label class="red-label">🔴 RED BALL NAME</label>
+<input id="redName" maxlength="18" value="MODI RED">
+</div>
+
+<div class="name-box">
+<label class="blue-label">🔵 BLUE BALL NAME</label>
+<input id="blueName" maxlength="18" value="RAHUL BLUE">
+</div>
+</div>
+
+<div>
+<button id="play">▶️ PLAY</button>
+<button id="full">⛶ FULL SCREEN</button>
+</div>
+
+<div id="result">Ready? Press PLAY!</div>
+<div id="soundStatus">🔊 आवाज़ शुरू करने के लिए PLAY दबाएँ</div>
+
+</div>
+
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+const play=document.getElementById("play");
+const result=document.getElementById("result");
+const soundStatus=document.getElementById("soundStatus");
+const redInput=document.getElementById("redName");
+const blueInput=document.getElementById("blueName");
+const app=document.getElementById("app");
+
+const cx=230,cy=245,RX=204,RY=214;
+const BALL_SIZE=36,HOLE_R=23;
+const SPIN_TIME=3300;
+const RANDOM_TIME=2600;
+const WIN_DURATION=650;
+
+let balls=[],running=false,frame=0,audio=null;
+let rollTimer=null,lastBounce=0,gameToken=0;
+let availableVoices=[],startTime=0,phase="idle";
+let winnerBall=null,winnerStart=null,phaseTime=0;
+
+function loadVoices(){
+if("speechSynthesis"in window)
+availableVoices=window.speechSynthesis.getVoices()||[];
+}
+
+if("speechSynthesis"in window){
+loadVoices();
+window.speechSynthesis.onvoiceschanged=loadVoices;
+}
+
+function getName(input,fallback){
+return input.value.trim().slice(0,18)||fallback;
+}
+
+function makeBalls(){
+balls=[
+{
+x:cx-62,y:cy-45,vx:0,vy:0,r:BALL_SIZE,
+color:"#f51d32",name:getName(redInput,"RED"),id:"red",
+stopped:false,gone:false,hop:0,
+angle:Math.atan2(-45,-62),trail:[]
+},
+{
+x:cx+65,y:cy+42,vx:0,vy:0,r:BALL_SIZE,
+color:"#087fff",name:getName(blueInput,"BLUE"),id:"blue",
+stopped:false,gone:false,hop:0,
+angle:Math.atan2(42,65),trail:[]
+}
+];
+}
+
+function startAudio(){
+try{
+const AC=window.AudioContext||window.webkitAudioContext;
+if(!AC)return;
+if(!audio)audio=new AC();
+if(audio.state==="suspended")audio.resume();
+soundStatus.textContent="🔊 Rubber rolling sound ON";
+}catch(e){}
+}
+
+function tone(freq,duration,volume,type="sine"){
+if(!audio)return;
+try{
+const osc=audio.createOscillator();
+const gain=audio.createGain();
+
+osc.type=type;
+osc.frequency.setValueAtTime(freq,audio.currentTime);
+gain.gain.setValueAtTime(volume,audio.currentTime);
+gain.gain.exponentialRampToValueAtTime(.001,audio.currentTime+duration);
+
+osc.connect(gain);
+gain.connect(audio.destination);
+osc.start();
+osc.stop(audio.currentTime+duration);
+}catch(e){}
+}
+
+function rubberRoll(){
+if(!running||!audio)return;
+
+try{
+const now=audio.currentTime;
+const osc=audio.createOscillator();
+const gain=audio.createGain();
+
+osc.type="sine";
+osc.frequency.setValueAtTime(125+Math.random()*65,now);
+osc.frequency.exponentialRampToValueAtTime(65+Math.random()*20,now+.085);
+
+gain.gain.setValueAtTime(.001,now);
+gain.gain.linearRampToValueAtTime(.085,now+.012);
+gain.gain.exponentialRampToValueAtTime(.001,now+.105);
+
+osc.connect(gain);
+gain.connect(audio.destination);
+osc.start();
+osc.stop(now+.11);
+
+const buffer=audio.createBuffer(1,Math.floor(audio.sampleRate*.05),audio.sampleRate);
+const data=buffer.getChannelData(0);
+
+for(let i=0;i<data.length;i++)
+data[i]=(Math.random()*2-1)*.3;
+
+const source=audio.createBufferSource();
+const noiseGain=audio.createGain();
+
+source.buffer=buffer;
+noiseGain.gain.value=.025;
+source.connect(noiseGain);
+noiseGain.connect(audio.destination);
+source.start();
+
+}catch(e){}
+
+rollTimer=setTimeout(rubberRoll,45+Math.random()*30);
+}
+
+function stopRollingSound(){
+if(rollTimer!==null){
+clearTimeout(rollTimer);
+rollTimer=null;
+}
+}
+
+function bounceSound(strong=false){
+const now=performance.now();
+if(now-lastBounce<55)return;
+lastBounce=now;
+tone(strong?155:235,strong?.12:.085,strong?.19:.13);
+}
+
+function announceWinner(name){
+if(!("speechSynthesis"in window)){
+soundStatus.textContent="🏆 विजेता: "+name;
+return;
+}
+
+try{
+const synth=window.speechSynthesis;
+synth.cancel();
+loadVoices();
+
+const utter=new SpeechSynthesisUtterance(
+"और विजेता हैं... "+name+"! बहुत-बहुत बधाई!"
+);
+
+utter.lang="hi-IN";
+utter.rate=.82;
+utter.pitch=1.18;
+utter.volume=1;
+
+const voices=availableVoices.length?availableVoices:synth.getVoices();
+const hindi=voices.filter(v=>v.lang&&v.lang.toLowerCase().startsWith("hi"));
+const female=hindi.find(v=>/female|woman|heera|kalpana|swara|aditi/i.test(v.name));
+const selected=female||hindi[0];
+
+if(selected){
+utter.voice=selected;
+utter.lang=selected.lang;
+}
+
+utter.onstart=()=>soundStatus.textContent="🔊 विजेता का नाम सुनिए...";
+utter.onend=()=>soundStatus.textContent="🏆 विजेता: "+name;
+utter.onerror=()=>soundStatus.textContent="🏆 विजेता: "+name;
+
+setTimeout(()=>{
+try{synth.speak(utter)}catch(e){}
+},250);
+
+}catch(e){
+soundStatus.textContent="🏆 विजेता: "+name;
+}
+}
+
+/* Original metallic bowl design */
+function drawBowl(){
+ctx.clearRect(0,0,460,500);
+
+ctx.save();
+ctx.beginPath();
+ctx.ellipse(cx+5,cy+14,RX+9,RY+10,0,0,Math.PI*2);
+ctx.fillStyle="#000";
+ctx.shadowColor="#000";
+ctx.shadowBlur=26;
+ctx.fill();
+ctx.restore();
+
+let outer=ctx.createRadialGradient(cx-65,cy-95,15,cx,cy,260);
+outer.addColorStop(0,"#d4deea");
+outer.addColorStop(.25,"#56677b");
+outer.addColorStop(.55,"#111a27");
+outer.addColorStop(.8,"#7b8ca0");
+outer.addColorStop(1,"#03070d");
+
+ctx.beginPath();
+ctx.ellipse(cx,cy,RX+8,RY+8,0,0,Math.PI*2);
+ctx.fillStyle=outer;
+ctx.fill();
+
+ctx.beginPath();
+ctx.ellipse(cx,cy,RX,RY,0,0,Math.PI*2);
+
+let rim=ctx.createLinearGradient(0,cy-RY,0,cy+RY);
+rim.addColorStop(0,"#ffffff");
+rim.addColorStop(.1,"#879bb0");
+rim.addColorStop(.3,"#26364a");
+rim.addColorStop(.5,"#dce4ed");
+rim.addColorStop(.73,"#53677c");
+rim.addColorStop(.92,"#172333");
+rim.addColorStop(1,"#d3dce7");
+
+ctx.fillStyle=rim;
+ctx.fill();
+
+ctx.save();
+ctx.beginPath();
+ctx.ellipse(cx,cy,RX-13,RY-14,0,0,Math.PI*2);
+ctx.clip();
+
+let inside=ctx.createRadialGradient(cx-50,cy-70,5,cx,cy,240);
+inside.addColorStop(0,"#ffffff");
+inside.addColorStop(.25,"#eef1f5");
+inside.addColorStop(.5,"#bac5d1");
+inside.addColorStop(.73,"#6b7a8c");
+inside.addColorStop(.91,"#303e50");
+inside.addColorStop(1,"#111824");
+
+ctx.fillStyle=inside;
+ctx.fillRect(0,0,460,500);
+
+let shade=ctx.createRadialGradient(cx,cy,60,cx,cy,230);
+shade.addColorStop(0,"#ffffff00");
+shade.addColorStop(.7,"#111a2710");
+shade.addColorStop(1,"#000000bb");
+
+ctx.fillStyle=shade;
+ctx.fillRect(0,0,460,500);
+ctx.restore();
+
+ctx.beginPath();
+ctx.ellipse(cx,cy,RX-13,RY-14,0,0,Math.PI*2);
+ctx.strokeStyle="#ffffffbb";
+ctx.lineWidth=2;
+ctx.stroke();
+
+ctx.beginPath();
+ctx.ellipse(cx,cy+3,36,36,0,0,Math.PI*2);
+ctx.fillStyle="#344052";
+ctx.fill();
+
+ctx.beginPath();
+ctx.ellipse(cx,cy,31,31,0,0,Math.PI*2);
+
+let edge=ctx.createRadialGradient(cx,cy,12,cx,cy,33);
+edge.addColorStop(0,"#000");
+edge.addColorStop(.72,"#03060b");
+edge.addColorStop(1,"#637083");
+
+ctx.fillStyle=edge;
+ctx.fill();
+
+ctx.beginPath();
+ctx.ellipse(cx,cy,HOLE_R,HOLE_R,0,0,Math.PI*2);
+
+let black=ctx.createRadialGradient(cx-5,cy-6,1,cx,cy,27);
+black.addColorStop(0,"#000000");
+black.addColorStop(.8,"#020306");
+black.addColorStop(1,"#080b11");
+
+ctx.fillStyle=black;
+ctx.fill();
+
+ctx.beginPath();
+ctx.ellipse(cx,cy,RX+3,RY+3,0,Math.PI*1.12,Math.PI*1.65);
+ctx.strokeStyle="#ffffff99";
+ctx.lineWidth=3;
+ctx.stroke();
+}
+
+/* Ball appearance with soft directional haze, no hard streaks */
+function drawBall(b){
+if(b.gone)return;
+
+const y=b.y-b.hop;
+const r=b.r;
+
+/* Shadow */
+ctx.save();
+ctx.globalAlpha=.32;
+ctx.beginPath();
+ctx.ellipse(b.x+5,b.y+7,r*1.1,r*.78,0,0,Math.PI*2);
+ctx.fillStyle="#000";
+ctx.fill();
+ctx.restore();
+
+/* Soft airy motion blur behind each ball */
+if(phase==="spin"){
+const speed=Math.hypot(b.vx,b.vy);
+const blur=Math.min(1,speed/13);
+
+if(blur>.03){
+const vx=b.vx/(speed||1);
+const vy=b.vy/(speed||1);
+const length=Math.min(34,speed*2.8);
+const color=b.id==="red"?"245,29,50":"8,127,255";
+
+ctx.save();
+ctx.globalCompositeOperation="lighter";
+
+/* Multiple diffuse clouds create a smooth wind-like effect */
+for(let i=0;i<9;i++){
+const t=i/8;
+const px=b.x-vx*length*t;
+const py=y-vy*length*t;
+const radius=5+t*13;
+
+const alpha=(1-t)*.075*blur;
+
+const haze=ctx.createRadialGradient(
+px,py,0,
+px,py,radius
+);
+
+haze.addColorStop(0,`rgba(${color},${alpha})`);
+haze.addColorStop(.35,`rgba(${color},${alpha*.6})`);
+haze.addColorStop(1,`rgba(${color},0)`);
+
+ctx.fillStyle=haze;
+ctx.beginPath();
+ctx.arc(px,py,radius,0,Math.PI*2);
+ctx.fill();
+}
+
+ctx.restore();
+}
+}
+
+/* Original glossy ball */
+ctx.save();
+ctx.shadowColor=b.color;
+ctx.shadowBlur=12;
+
+ctx.beginPath();
+ctx.arc(b.x,y,r,0,Math.PI*2);
+
+const grad=ctx.createRadialGradient(
+b.x-r*.38,y-r*.48,1,
+b.x,y,r*1.2
+);
+
+if(b.id==="red"){
+grad.addColorStop(0,"#fff4f4");
+grad.addColorStop(.13,"#ff929a");
+grad.addColorStop(.4,"#fa2038");
+grad.addColorStop(.78,"#b9001a");
+grad.addColorStop(1,"#56000b");
+}else{
+grad.addColorStop(0,"#ffffff");
+grad.addColorStop(.14,"#b8e9ff");
+grad.addColorStop(.4,"#168dff");
+grad.addColorStop(.78,"#0750bd");
+grad.addColorStop(1,"#022453");
+}
+
+ctx.fillStyle=grad;
+ctx.fill();
+ctx.restore();
+
+ctx.beginPath();
+ctx.ellipse(b.x-r*.31,y-r*.39,r*.30,r*.15,-.6,0,Math.PI*2);
+ctx.fillStyle="#ffffffdd";
+ctx.fill();
+
+ctx.beginPath();
+ctx.arc(b.x,y,r-.6,0,Math.PI*2);
+ctx.strokeStyle="#ffffff66";
+ctx.lineWidth=1;
+ctx.stroke();
+}
+
+/* Soft haze only: no polygon trails, no connected lines or dots */
+function drawTrails(){
+ctx.save();
+
+ctx.beginPath();
+ctx.ellipse(cx,cy,RX-18,RY-18,0,0,Math.PI*2);
+ctx.clip();
+
+for(const b of balls){
+if(b.gone||b.trail.length<2)continue;
+
+const len=b.trail.length;
+const color=b.id==="red"?"245,29,50":"8,127,255";
+
+for(let i=1;i<len;i++){
+const p=b.trail[i];
+const progress=i/len;
+const alpha=progress*.055;
+const radius=5+progress*12;
+
+const haze=ctx.createRadialGradient(
+p.x,p.y,0,
+p.x,p.y,radius
+);
+
+haze.addColorStop(0,`rgba(${color},${alpha})`);
+haze.addColorStop(.4,`rgba(${color},${alpha*.45})`);
+haze.addColorStop(1,`rgba(${color},0)`);
+
+ctx.fillStyle=haze;
+ctx.beginPath();
+ctx.arc(p.x,p.y,radius,0,Math.PI*2);
+ctx.fill();
+}
+}
+
+ctx.restore();
+}
+
+function draw(){
+drawBowl();
+drawTrails();
+balls.forEach(drawBall);
+}
+
+/* Fast circular spin with gradual slowdown */
+function spinBalls(elapsed,dt){
+const step=Math.min(dt/16.667,2);
+const progress=Math.min(elapsed/SPIN_TIME,1);
+const ease=progress*progress*(3-2*progress);
+const angularSpeed=.34-(ease*.285);
+
+for(let i=0;i<balls.length;i++){
+const b=balls[i];
+if(b.stopped||b.gone)continue;
+
+b.angle+=angularSpeed*step;
+
+const orbitRX=i===0?126:137;
+const orbitRY=i===0?145:155;
+
+const targetX=cx+Math.cos(b.angle)*orbitRX;
+const targetY=cy+Math.sin(b.angle)*orbitRY;
+const smooth=1-Math.pow(.72,step);
+
+b.x+=(targetX-b.x)*smooth;
+b.y+=(targetY-b.y)*smooth;
+
+b.vx=-Math.sin(b.angle)*angularSpeed*orbitRX;
+b.vy=Math.cos(b.angle)*angularSpeed*orbitRY;
+
+b.hop=2+Math.abs(Math.sin(frame*.6+i))*4;
+
+b.trail.push({x:b.x,y:b.y});
+if(b.trail.length>12)b.trail.shift();
+}
+}
+
+/* Random bouncing after the circular spin */
+function updateBall(b,dt){
+if(b.stopped||b.gone)return;
+
+const step=Math.min(dt/16.667,2);
+
+if(b.trail.length)b.trail.shift();
+
+b.vx+=(Math.random()-.5)*.8*step;
+b.vy+=(Math.random()-.5)*.8*step;
+
+let speed=Math.hypot(b.vx,b.vy)||1;
+const maxSpeed=10.5;
+
+if(speed>maxSpeed){
+b.vx=b.vx/speed*maxSpeed;
+b.vy=b.vy/speed*maxSpeed;
+}
+
+if(speed<3.2){
+b.vx+=(Math.random()-.5)*2.4;
+b.vy+=(Math.random()-.5)*2.4;
+}
+
+b.x+=b.vx*step;
+b.y+=b.vy*step;
+
+b.trail.push({x:b.x,y:b.y});
+if(b.trail.length>8)b.trail.shift();
+
+const dx=b.x-cx;
+const dy=b.y-cy;
+const d=Math.hypot(dx,dy)||1;
+const limit=Math.min(RX,RY)-25-b.r;
+
+if(d>limit){
+const nx=dx/d;
+const ny=dy/d;
+
+b.x=cx+nx*limit;
+b.y=cy+ny*limit;
+
+const dot=b.vx*nx+b.vy*ny;
+
+b.vx-=2*dot*nx;
+b.vy-=2*dot*ny;
+
+b.vx*=1.04;
+b.vy*=1.04;
+
+bounceSound(true);
+}
+
+b.hop=Math.abs(Math.sin(frame*.48+b.r))*(2+Math.min(speed,10)*.65);
+}
+
+function collide(){
+const a=balls[0];
+const b=balls[1];
+
+if(!a||!b||a.stopped||b.stopped)return;
+
+const dx=b.x-a.x;
+const dy=b.y-a.y;
+const d=Math.hypot(dx,dy)||1;
+const min=a.r+b.r;
+
+if(d<min){
+const nx=dx/d;
+const ny=dy/d;
+const overlap=(min-d)/2;
+
+a.x-=nx*overlap;
+a.y-=ny*overlap;
+b.x+=nx*overlap;
+b.y+=ny*overlap;
+
+const rel=(a.vx-b.vx)*nx+(a.vy-b.vy)*ny;
+
+if(rel>0){
+a.vx-=rel*nx;
+a.vy-=rel*ny;
+b.vx+=rel*nx;
+b.vy+=rel*ny;
+}
+
+a.vx+=(Math.random()-.5)*2.5;
+a.vy+=(Math.random()-.5)*2.5;
+b.vx+=(Math.random()-.5)*2.5;
+b.vy+=(Math.random()-.5)*2.5;
+
+bounceSound(false);
+}
+}
+
+function beginWinner(token){
+if(token!==gameToken||!running||phase==="winner")return;
+
+phase="winner";
+phaseTime=performance.now();
+
+const a=balls[0];
+const b=balls[1];
+
+winnerBall=
+Math.hypot(a.x-cx,a.y-cy)<=Math.hypot(b.x-cx,b.y-cy)
+?a:b;
+
+winnerStart={x:winnerBall.x,y:winnerBall.y};
+winnerBall.gone=false;
+winnerBall.stopped=false;
+winnerBall.trail=[];
+
+result.textContent="🎯 "+winnerBall.name+" IS WINNING!";
+}
+
+function settleWinner(token){
+if(token!==gameToken||!running||!winnerBall)return;
+
+const b=winnerBall;
+
+running=false;
+phase="done";
+stopRollingSound();
+
+b.stopped=true;
+b.gone=false;
+b.x=cx;
+b.y=cy;
+b.r=BALL_SIZE;
+b.hop=0;
+b.vx=0;
+b.vy=0;
+b.trail=[];
+
+for(const other of balls){
+other.gone=false;
+other.trail=[];
+other.stopped=true;
+if(other!==b)other.hop=0;
+}
+
+result.textContent=b.name+" WINS!";
+
+tone(520,.16,.18);
+setTimeout(()=>tone(760,.24,.15),150);
+
+announceWinner(b.name);
+
+draw();
+play.disabled=false;
+play.textContent="▶️ PLAY AGAIN";
+soundStatus.textContent="🏆 विजेता: "+b.name;
+}
+
+function animate(token,previousTime){
+if(!running||token!==gameToken)return;
+
+const now=performance.now();
+const dt=previousTime?Math.min(now-previousTime,34):16.667;
+const elapsed=now-startTime;
+
+frame++;
+
+if(phase==="spin"){
+spinBalls(elapsed,dt);
+
+if(elapsed>=SPIN_TIME){
+phase="random";
+
+for(const b of balls){
+b.vx=-Math.sin(b.angle)*4.2;
+b.vy=Math.cos(b.angle)*4.2;
+b.trail=[];
+}
+
+result.textContent="💥 Balls colliding...";
+}
+
+}else if(phase==="random"){
+balls.forEach(b=>updateBall(b,dt));
+collide();
+
+if(elapsed>=SPIN_TIME+RANDOM_TIME){
+beginWinner(token);
+}
+
+}else if(phase==="winner"){
+const t=Math.min((now-phaseTime)/WIN_DURATION,1);
+const ease=1-Math.pow(1-t,3);
+const b=winnerBall;
+
+b.x=winnerStart.x+(cx-winnerStart.x)*ease;
+b.y=winnerStart.y+(cy-winnerStart.y)*ease;
+b.hop=Math.sin(t*Math.PI)*3;
+b.gone=false;
+
+for(const other of balls){
+if(other!==b&&!other.stopped)updateBall(other,dt);
+}
+
+if(t>=1){
+settleWinner(token);
+return;
+}
+}
+
+draw();
+requestAnimationFrame(()=>animate(token,now));
+}
+
+play.addEventListener("click",()=>{
+if(running)return;
+
+gameToken++;
+const token=gameToken;
+
+if("speechSynthesis"in window){
+window.speechSynthesis.cancel();
+loadVoices();
+}
+
+startAudio();
+stopRollingSound();
+makeBalls();
+
+frame=0;
+running=true;
+phase="spin";
+startTime=performance.now();
+
+winnerBall=null;
+winnerStart=null;
+
+play.disabled=true;
+play.textContent="🎲 ROLLING...";
+
+result.textContent="Balls spinning in a circle...";
+soundStatus.textContent="🔊 Rubber rolling sound ON";
+
+tone(260,.12,.16);
+rubberRoll();
+
+draw();
+requestAnimationFrame(t=>animate(token,t));
+});
+
+document.getElementById("full").addEventListener("click",async()=>{
+try{
+if(!document.fullscreenElement){
+if(app.requestFullscreen)await app.requestFullscreen();
+else if(app.webkitRequestFullscreen)app.webkitRequestFullscreen();
+else result.textContent="Use Safari Share → Add to Home Screen.";
+}else if(document.exitFullscreen){
+await document.exitFullscreen();
+}
+}catch(e){
+result.textContent="Use Safari Share → Add to Home Screen for full screen.";
+}
+});
+
+makeBalls();
+draw();
+</script>
+</body>
+</html>
